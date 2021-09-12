@@ -3,6 +3,7 @@ from discord.ext import commands
 from Othello import *
 from io import BytesIO
 from discord.ext.commands import CommandNotFound
+import json
 
 app = commands.Bot(command_prefix='o!', help_command=None)
 
@@ -51,42 +52,51 @@ def getDiscordId(name_tag):
     return int(name_tag[3:21])
 
 
-@app.command()
+@app.command(name='start', description='Game start')
 async def start(ctx, player2):
-    try:
-        game = OmokGame(ctx.author.id, getDiscordId(player2))
-        game.gameSave()
-        out = sendImage(game)
-        await ctx.send(f"<@!{ctx.author.id}> vs {player2}\n", file=out)
-    except OngoingException:
-        _embed = discord.Embed(
-            title='게임을 진행중인 플레이어가 있습니다!\n먼저 진행중인 게임을 종료해주세요!',
-            color=0xff0000)
-        await ctx.send(embed=_embed)
+    game = OmokGame(ctx.author.id, getDiscordId(player2))
+    game.gameSave()
+    out = sendImage(game)
+    _embed = discord.Embed(
+        title=f'{game.color[game.turn]}이 선입니다.',
+        color=0xff0000)
+    await ctx.send(f"<@!{ctx.author.id}> vs {player2}\n", file=out, embed=_embed)
+    return await ctx.send(f"<@!{ctx.author.id}> 가 `{game.color[ctx.author.id]}` 이고,\n"
+                          f"{player2} 가 `{game.color[getDiscordId(player2)]}` 입니다.")
 
 
-@app.command()
+al_nu = dict(zip('ABCDEFGHIJKLMNOPQRS', map(int, '1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19'.split())))
+
+
+@app.command(name='ss', description="Set Stone")
 async def ss(ctx, player2, position):
-    try:
-        game = OmokGame(ctx.author.id, getDiscordId(player2))
-        game.putStone(ctx.author.id, position)
-        out = sendImage(game)
-        game.gameSave()
-        await ctx.send(f"<@!{ctx.author.id}> vs {player2}\n", file=out)
-
-    except OngoingException:
+    game = OmokGame(ctx.author.id, getDiscordId(player2))
+    if game.isAnotherGameOnGoing():
         _embed = discord.Embed(
             title='진행중인 게임이 있습니다!\n먼저 진행중인 게임을 종료해주세요!',
             color=0xff0000)
-        await ctx.send(embed=_embed)
-    except CannotSetStoneException:
+        return await ctx.send(embed=_embed)
+    position = position.upper()
+    x, y = al_nu[position[:1]], int(position[1:])
+    if game.isMyTurn(ctx.author.id):
+        _embed = discord.Embed(
+            title='당신의 차례가 아닙니다!',
+            color=0xff0000)
+        return await ctx.send(embed=_embed)
+    elif game.isAbleSetStone(x, y):
         _embed = discord.Embed(
             title='해당 위치에는 돌을 놓을 수 없습니다 ^^',
             color=0xff0000)
-        await ctx.send(embed=_embed)
+        return await ctx.send(embed=_embed)
+    game.putStone(ctx.author.id, x, y)
+    out = sendImage(game)
+    _embed = discord.Embed(
+        title=f'{game.color[game.turn]}의 차례입니다.',
+        color=0x55ee00)
+    await ctx.send(f"<@!{ctx.author.id}> vs {player2}\n", file=out, embed=_embed)
 
 
-@app.command(name='게임 종료', description="")
+@app.command(name='end', description="게임 종료")
 async def end(ctx, player2):
     game = OmokGame(ctx.author.id, getDiscordId(player2))
     game.gameTerminate()
@@ -105,4 +115,6 @@ async def help(ctx):
     await ctx.send(helptext)
 
 
-app.run('ODg1MzYzNTUyNTk1MDg3NDEz.YTl9EA.3BIKD5J7cCjapiIcQb_hYJL8Ko8')
+with open('keys.json') as json_file:
+    data = json.load(json_file)
+app.run(data["Bot_Key"])
