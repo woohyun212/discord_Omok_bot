@@ -41,7 +41,7 @@ async def hello(ctx):
 #     await ctx.send(embed=_embed)
 
 
-def sendImage(game):
+def getDiscordImage(game):
     with BytesIO() as image_binary:
         game.getImageFromBoard().save(image_binary, 'png')
         image_binary.seek(0)
@@ -56,11 +56,11 @@ def getDiscordId(name_tag):
 async def start(ctx, player2):
     game = OmokGame(ctx.author.id, getDiscordId(player2))
     game.gameSave()
-    out = sendImage(game)
+    file_image = getDiscordImage(game)
     _embed = discord.Embed(
         title=f'{game.color[game.turn]}이 선입니다.',
-        color=0xff0000)
-    await ctx.send(f"<@!{ctx.author.id}> vs {player2}\n", file=out, embed=_embed)
+        color=0xff00ff)
+    await ctx.send(f"<@!{ctx.author.id}> vs {player2}\n", file=file_image, embed=_embed)
     return await ctx.send(f"<@!{ctx.author.id}> 가 `{game.color[ctx.author.id]}` 이고,\n"
                           f"{player2} 가 `{game.color[getDiscordId(player2)]}` 입니다.")
 
@@ -76,9 +76,17 @@ async def ss(ctx, player2, position):
             title='진행중인 게임이 있습니다!\n먼저 진행중인 게임을 종료해주세요!',
             color=0xff0000)
         return await ctx.send(embed=_embed)
+    if game.isGameOnGoing():
+        print("진행 중인 게임이 존재합니다. 진행중이던 게임을 불러옵니다.")
+        game.LoadGameData()
+    else:
+        print("진행 중인 게임이 없습니다. 초기화 후 새로운 게임을 시작합니다.")
+        game.gameSave()
+
     position = position.upper()
     x, y = al_nu[position[:1]], int(position[1:])
-    if game.isMyTurn(ctx.author.id):
+    if not game.isMyTurn(ctx.author.id):
+        print(ctx.author.id, game.turn)
         _embed = discord.Embed(
             title='당신의 차례가 아닙니다!',
             color=0xff0000)
@@ -89,11 +97,21 @@ async def ss(ctx, player2, position):
             color=0xff0000)
         return await ctx.send(embed=_embed)
     game.putStone(ctx.author.id, x, y)
-    out = sendImage(game)
+    file_image = getDiscordImage(game)
+    if game.isWin(x, y):
+        game.gameTerminate()
+        _embed = discord.Embed(
+            description=f'<@!{game.turn}>의 우승!',
+            color=0x448AFF)
+        return await ctx.send(embed=_embed, file=file_image)
+
+    game.changeTurn()
+    game.gameSave()
+
     _embed = discord.Embed(
-        title=f'{game.color[game.turn]}의 차례입니다.',
+        description=f'<@!{game.turn}>의 차례입니다.',
         color=0x55ee00)
-    await ctx.send(f"<@!{ctx.author.id}> vs {player2}\n", file=out, embed=_embed)
+    await ctx.send(f"<@!{ctx.author.id}> vs {player2}\n", file=file_image, embed=_embed)
 
 
 @app.command(name='end', description="게임 종료")
@@ -106,8 +124,8 @@ async def end(ctx, player2):
     await ctx.send(embed=_embed)
 
 
-@app.command(name="help", description="Returns all commands available")
-async def help(ctx):
+@app.command(name="command", description="Returns all commands available")
+async def command(ctx):
     helptext = "```"
     for command in app.commands:
         helptext += f"{command}\n"
